@@ -96,11 +96,12 @@ def get_memory() -> str:
         size_in_bytes = -1
 
     if size_in_bytes is None or size_in_bytes < 0:
-        size, unit = -1.0, ""
+        size, unit = "unknown", ""
     else:
         size, unit = trans_utils.format_size(size_in_bytes)
+        size = round(size, 2)
 
-    return f"Free {round(size, 2)} {unit}"
+    return f"Free disk space: {size} {unit}"
 
 
 def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
@@ -377,22 +378,13 @@ def add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
     torrent = trans_client.get_torrent(torrent_id)
     text = "🆕__Adding torrent__🆕\n"
     text += f"*{escape_markdown(torrent.name, 2)}*\n"
-    try:
-        size_in_bytes = trans_client.free_space(DISK)
-    except TransmissionError:
-        logger.exception("Failed to get free space")
-        size_in_bytes = -1
     total_size = trans_utils.format_size(torrent.total_size)
     size_when_done = trans_utils.format_size(torrent.size_when_done)
     raw_text = (
         f"Size to download: {round(size_when_done[0], 2)} {size_when_done[1]}"
         f" / {round(total_size[0], 2)} {total_size[1]}\n"
+        f"{get_memory()}\n"
     )
-    if size_in_bytes is not None and size_in_bytes >= 0:
-        free_memory = trans_utils.format_size(size_in_bytes)
-        raw_text += f"Free disk space: {round(free_memory[0], 2)} {free_memory[1]}\n"
-    else:
-        raw_text += "Could not get free disk space\n"
     text += escape_markdown(raw_text, 2)
     reply_markup = telegram.InlineKeyboardMarkup(
         [
