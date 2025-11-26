@@ -1,11 +1,14 @@
-import base64
+import logging
 
 import telegram
 import transmission_rpc as trans
 import transmission_rpc.utils as trans_utils
 from telegram.helpers import escape_markdown
+from transmission_rpc.error import TransmissionError
 
 from . import config, utils
+
+logger = logging.getLogger(__name__)
 
 STATUS_LIST = {
     "downloading": "⏬",
@@ -63,12 +66,14 @@ def delete_torrent(torrent_id: int, data: bool = False):
 
 
 def torrent_set_files(torrent_id: int, file_id: int, state: bool):
-    trans_client.set_files({torrent_id: {file_id: {"selected": state}}})
+    if state:
+        trans_client.change_torrent(ids=torrent_id, files_wanted=[file_id])
+    else:
+        trans_client.change_torrent(ids=torrent_id, files_unwanted=[file_id])
 
 
 def add_torrent_with_file(file: bytes) -> trans.Torrent:
-    encoded_file = base64.b64encode(file).decode("utf-8")
-    return trans_client.add_torrent(encoded_file, paused=True)
+    return trans_client.add_torrent(bytes(file), paused=True)
 
 
 def add_torrent_with_magnet(url: str) -> trans.Torrent:
@@ -85,11 +90,18 @@ def add_torrent() -> str:
 
 
 def get_memory() -> str:
-    size_in_bytes = trans_client.free_space(DISK)
-    if size_in_bytes is None:
-        return "Something went wrong"
-    free_memory = trans_utils.format_size(size_in_bytes)
-    return f"Free {round(free_memory[0], 2)} {free_memory[1]}"
+    try:
+        size_in_bytes = trans_client.free_space(DISK)
+    except TransmissionError:
+        logger.exception("Failed to get free space")
+        size_in_bytes = -1
+
+    if size_in_bytes is None or size_in_bytes < 0:
+        size, unit = -1, ""
+    else:
+        size, unit = trans_utils.format_size(size_in_bytes)
+
+    return f"Free {round(size, 2)} {unit}"
 
 
 def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
@@ -102,26 +114,26 @@ def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
         )
     else:
         text += escape_markdown(
-            f"{utils.progress_bar(torrent.recheckProgress * 100)}  {(round(torrent.recheckProgress * 100, 1))}% ",
+            f"{utils.progress_bar(torrent.recheck_progress * 100)}  {(round(torrent.recheck_progress * 100, 1))}% ",
             2,
         )
     text += f"{STATUS_LIST[torrent.status]}\n"
-    if download := torrent.rateDownload:
+    if download := torrent.rate_download:
         speed = trans_utils.format_speed(download)
         raw_text = f"Time remaining: {utils.formated_eta(torrent)}\nDownload rate: {round(speed[0], 1)} {speed[1]}\n"
         text += escape_markdown(raw_text, 2)
     if torrent.status != "seeding":
-        downloaded_bytes: int = torrent.sizeWhenDone - torrent.leftUntilDone
+        downloaded_bytes: int = torrent.size_when_done - torrent.left_until_done
         downloaded = trans_utils.format_size(downloaded_bytes)
         raw_text = f"Downloaded: {round(downloaded[0], 2)} {downloaded[1]}\n"
         text += escape_markdown(raw_text, 2)
-    if upload := torrent.rateUpload:
+    if upload := torrent.rate_upload:
         speed = trans_utils.format_speed(upload)
         raw_text = f"Upload rate: {round(speed[0], 1)} {speed[1]}\n"
         text += escape_markdown(raw_text, 2)
-    size_when_done = trans_utils.format_size(torrent.sizeWhenDone)
-    total_size = trans_utils.format_size(torrent.totalSize)
-    total_uploaded = trans_utils.format_size(torrent.uploadedEver)
+    size_when_done = trans_utils.format_size(torrent.size_when_done)
+    total_size = trans_utils.format_size(torrent.total_size)
+    total_uploaded = trans_utils.format_size(torrent.uploaded_ever)
     raw_text = (
         f"Size to download: {round(size_when_done[0], 2)} {size_when_done[1]}"
         f" / {round(total_size[0], 2)} {total_size[1]}\n"
@@ -135,7 +147,7 @@ def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
         )
     else:
         start_stop = telegram.InlineKeyboardButton(
-            "⏹Stop",
+            "⏹️Stop",
             callback_data=f"torrent_{torrent_id}_stop",
         )
     reply_markup = telegram.InlineKeyboardMarkup(
@@ -187,7 +199,7 @@ def get_files(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
     column = 0
     row = 0
     file_keyboard: list[list[telegram.InlineKeyboardButton]] = [[]]
-    for file_id, file in enumerate(torrent.files()):
+    for file_id, file in enumerate(torrent.get_files()):
         raw_name = file.name.split("/")
         filename = raw_name[1] if len(raw_name) == 2 else file.name
         if len(filename) >= max_line_len:
@@ -224,8 +236,8 @@ def get_files(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
         file_keyboard[row].append(button)
     delimiter = "".join("-" for _ in range(60))
     text += escape_markdown(f"{delimiter}\n", 2)
-    total_size = trans_utils.format_size(torrent.totalSize)
-    size_when_done = trans_utils.format_size(torrent.sizeWhenDone)
+    total_size = trans_utils.format_size(torrent.total_size)
+    size_when_done = trans_utils.format_size(torrent.size_when_done)
     text += escape_markdown(
         f"Size to download: {round(size_when_done[0], 2)} {size_when_done[1]}"
         f" / {round(total_size[0], 2)} {total_size[1]}",
@@ -366,14 +378,18 @@ def add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
     torrent = trans_client.get_torrent(torrent_id)
     text = "🆕__Adding torrent__🆕\n"
     text += f"*{escape_markdown(torrent.name, 2)}*\n"
-    size_in_bytes = trans_client.free_space(DISK)
-    total_size = trans_utils.format_size(torrent.totalSize)
-    size_when_done = trans_utils.format_size(torrent.sizeWhenDone)
+    try:
+        size_in_bytes = trans_client.free_space(DISK)
+    except TransmissionError:
+        logger.exception("Failed to get free space")
+        size_in_bytes = -1
+    total_size = trans_utils.format_size(torrent.total_size)
+    size_when_done = trans_utils.format_size(torrent.size_when_done)
     raw_text = (
         f"Size to download: {round(size_when_done[0], 2)} {size_when_done[1]}"
         f" / {round(total_size[0], 2)} {total_size[1]}\n"
     )
-    if size_in_bytes is not None:
+    if size_in_bytes is not None and size_in_bytes >= 0:
         free_memory = trans_utils.format_size(size_in_bytes)
         raw_text += f"Free disk space: {round(free_memory[0], 2)} {free_memory[1]}\n"
     else:
@@ -415,7 +431,7 @@ def select_files_add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboard
     column = 0
     row = 0
     file_keyboard: list[list[telegram.InlineKeyboardButton]] = [[]]
-    for file_id, file in enumerate(torrent.files()):
+    for file_id, file in enumerate(torrent.get_files()):
         raw_name = file.name.split("/")
         filename = raw_name[1] if len(raw_name) == 2 else file.name
         if len(filename) >= max_line_len:
@@ -442,8 +458,8 @@ def select_files_add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboard
             )
         column += 1
         file_keyboard[row].append(button)
-    total_size = trans_utils.format_size(torrent.totalSize)
-    size_when_done = trans_utils.format_size(torrent.sizeWhenDone)
+    total_size = trans_utils.format_size(torrent.total_size)
+    size_when_done = trans_utils.format_size(torrent.size_when_done)
     text += escape_markdown(
         f"Size to download: {round(size_when_done[0], 2)} {size_when_done[1]}"
         f" / {round(total_size[0], 2)} {total_size[1]}",

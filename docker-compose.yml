@@ -7,8 +7,6 @@ services:
       - "51413:51413"
       - "51413:51413/udp"
     environment:
-      - PUID=1000
-      - PGID=1000
       - TZ=Asia/Nicosia
       - USER=${TRANSMISSION_USER}
       - PASS=${TRANSMISSION_PASS}

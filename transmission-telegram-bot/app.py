@@ -91,7 +91,11 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
                 await query.answer(text="Nothing to reload")
         else:
             await query.answer()
-            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            try:
+                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            except BadRequest as exc:
+                if not str(exc).startswith("Message is not modified"):
+                    raise exc
 
 
 @utils.whitelist
@@ -153,7 +157,7 @@ async def torrent_file_handler(update: Update, context: ContextTypes.DEFAULT_TYP
     file = await context.bot.get_file(update.message.document)
     file_bytes = await file.download_as_bytearray()
     torrent = menus.add_torrent_with_file(file_bytes)
-    await update.message.reply_text("Torrent added", quote=True)
+    await update.message.reply_text("Torrent added", do_quote=True)
     text, reply_markup = menus.add_menu(torrent.id)
     await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
@@ -162,7 +166,7 @@ async def torrent_file_handler(update: Update, context: ContextTypes.DEFAULT_TYP
 async def magnet_url_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     magnet_url = update.message.text
     torrent = menus.add_torrent_with_magnet(magnet_url)
-    await update.message.reply_text("Torrent added", quote=True)
+    await update.message.reply_text("Torrent added", do_quote=True)
     text, reply_markup = menus.add_menu(torrent.id)
     await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 

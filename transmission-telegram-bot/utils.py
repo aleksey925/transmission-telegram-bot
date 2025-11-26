@@ -24,6 +24,8 @@ def formated_eta(torrent: trans.Torrent) -> str:
         eta = torrent.eta
     except ValueError:
         return "Unavailable"
+    if eta is None:
+        return "Unavailable"
     minutes, seconds = divmod(eta.seconds, 60)
     hours, minutes = divmod(minutes, 60)
     text = ""
