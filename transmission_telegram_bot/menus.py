@@ -79,6 +79,10 @@ def add_torrent_with_magnet(url: str) -> trans.Torrent:
     return trans_client.add_torrent(url, paused=True)
 
 
+def add_torrent_with_url(url: str) -> trans.Torrent:
+    return trans_client.add_torrent(url, paused=True)
+
+
 def menu() -> str:
     text = "List of available commands:\n/torrents - List all torrents\n/memory - Available memory\n/add - Add torrent"
     return text

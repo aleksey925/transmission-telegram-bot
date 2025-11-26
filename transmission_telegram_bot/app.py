@@ -174,6 +174,17 @@ async def magnet_url_handler(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 
 @utils.whitelist
+async def torrent_url_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message is None or update.message.text is None:
+        return
+    torrent_url = update.message.text.strip()
+    torrent = menus.add_torrent_with_url(torrent_url)
+    await update.message.reply_text("Torrent added", do_quote=True)
+    text, reply_markup = menus.add_menu(torrent.id)
+    await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+
+
+@utils.whitelist
 async def torrent_adding_actions(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     callback = query.data.split("_")
@@ -294,6 +305,7 @@ def run():
     application.add_error_handler(error_handler)
     application.add_handler(MessageHandler(filters.Document.FileExtension("torrent"), torrent_file_handler))
     application.add_handler(MessageHandler(filters.Regex(r"\Amagnet:\?xt=urn:btih:.*"), magnet_url_handler))
+    application.add_handler(MessageHandler(filters.Regex(r"(?i)\Ahttps?://.*\.torrent\b"), torrent_url_handler))
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", start))
     application.add_handler(CommandHandler("add", add))
