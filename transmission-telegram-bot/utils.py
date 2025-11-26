@@ -1,18 +1,19 @@
+import logging
 import math
 import time
-import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import pyngrok.ngrok
 import transmission_rpc as trans
 
 if TYPE_CHECKING:
-    from telegram.update import Update
     from telegram.ext import (
         CallbackContext,
         Updater,
     )
+    from telegram.update import Update
 
 from . import config
 
@@ -36,16 +37,12 @@ def setup_ngrok_webhook(updater: Updater):
     logger.debug("Installing ngrok")
     pyngrok.ngrok.install_ngrok()
     logger.debug("Setuping tunnel")
-    webhook_tunnel = pyngrok.ngrok.connect(
-        addr=config.PORT_NGROK_TUNNEL, proto="http", options={"bind_tls": True}
-    )
+    webhook_tunnel = pyngrok.ngrok.connect(addr=config.PORT_NGROK_TUNNEL, proto="http", options={"bind_tls": True})
     time.sleep(1)
     public_url: str = webhook_tunnel.public_url
     webhook = public_url.replace("http:", "https:")
     logger.debug("Starting webhook")
-    updater.start_webhook(
-        listen="127.0.0.1", port=config.PORT_NGROK_TUNNEL, url_path=config.TOKEN
-    )
+    updater.start_webhook(listen="127.0.0.1", port=config.PORT_NGROK_TUNNEL, url_path=config.TOKEN)
     logger.debug("Setting webhook")
     updater.bot.set_webhook(f"{webhook}/{config.TOKEN}")
 
@@ -57,9 +54,7 @@ def setup_webserver(updater: Updater):
     """
     if config.WEBHOOK_DOMAIN:
         logger.info("Starting webserver for webhook")
-        updater.start_webhook(
-            listen="0.0.0.0", port=config.WEBHOOK_PORT, url_path=config.TOKEN
-        )
+        updater.start_webhook(listen="0.0.0.0", port=config.WEBHOOK_PORT, url_path=config.TOKEN)
         logger.debug("Setting webhook")
         updater.bot.set_webhook(f"{config.WEBHOOK_DOMAIN}/{config.TOKEN}")
     else:
@@ -76,8 +71,7 @@ def setup_polling(updater: Updater):
 def progress_bar(percent: float) -> str:
     progres = math.floor(percent / 10)
     progres_string = (
-        f'{config.PROGRESS_BAR_EMOJIS["done"] * progres}'
-        f'{config.PROGRESS_BAR_EMOJIS["inprogress"] * (10-progres)}'
+        f"{config.PROGRESS_BAR_EMOJIS['done'] * progres}{config.PROGRESS_BAR_EMOJIS['inprogress'] * (10 - progres)}"
     )
     return progres_string
 

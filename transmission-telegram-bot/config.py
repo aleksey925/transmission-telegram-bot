@@ -1,5 +1,5 @@
-import os
 import json
+import os
 
 from dotenv import load_dotenv
 
@@ -13,9 +13,7 @@ WEBHOOK_PORT = 8080
 WEBHOOK_DOMAIN = os.getenv("WEBHOOK_DOMAIN")
 UPDATER_TYPE = os.getenv("UPDATER_TYPE", "polling")
 if UPDATER_TYPE not in allowed_updaters:
-    raise TypeError(
-        f"No such updater.\n Available options: {', '.join(allowed_updaters)}"
-    )
+    raise TypeError(f"No such updater.\n Available options: {', '.join(allowed_updaters)}")
 
 TRANSSMISION_HOST = os.getenv("TRANSSMISION_HOST", "127.0.0.1")
 TRANSSMISION_PORT = int(os.getenv("TRANSSMISION_PORT", 9091))
