@@ -317,7 +317,7 @@ def get_torrents(start_point: int = 0) -> tuple[str, telegram.InlineKeyboardMark
                 )
             keyboard[row].append(
                 telegram.InlineKeyboardButton(
-                    "Next⏩",
+                    "Next ⏩",
                     callback_data=f"torrentsgoto_{count}",
                 )
             )
@@ -357,13 +357,13 @@ def delete_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
         [
             [
                 telegram.InlineKeyboardButton(
-                    "❌Yes❌",
+                    "❌Yes",
                     callback_data=f"deletetorrent_{torrent_id}",
                 )
             ],
             [
                 telegram.InlineKeyboardButton(
-                    "❌Yes, with data❌",
+                    "❌Yes, with data",
                     callback_data=f"deletetorrent_{torrent_id}_data",
                 )
             ],
@@ -380,8 +380,7 @@ def delete_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
 
 def add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
     torrent = trans_client.get_torrent(torrent_id)
-    text = "🆕__Adding torrent__🆕\n"
-    text += f"*{escape_markdown(torrent.name, 2)}*\n"
+    text = f"*{escape_markdown(torrent.name, 2)}*\n"
     total_size = trans_utils.format_size(torrent.total_size)
     size_when_done = trans_utils.format_size(torrent.size_when_done)
     raw_text = (
