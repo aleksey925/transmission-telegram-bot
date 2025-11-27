@@ -44,7 +44,7 @@ async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE) -> None:
     torrent_id: int = data["torrent_id"]
 
     data["iteration"] += 1
-    remaining: int | None = AUTO_UPDATE_DURATION_SEC - (data["iteration"] * AUTO_UPDATE_INTERVAL_SEC)
+    remaining = AUTO_UPDATE_DURATION_SEC - (data["iteration"] * AUTO_UPDATE_INTERVAL_SEC)
 
     try:
         status = menus.get_torrent_status(torrent_id)
@@ -52,9 +52,9 @@ async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE) -> None:
         job.schedule_removal()
         return
 
-    if status not in AUTO_UPDATE_STATUSES or remaining is None or remaining <= 0:
+    if status not in AUTO_UPDATE_STATUSES or remaining <= 0:
         job.schedule_removal()
-        remaining = None
+        return
 
     try:
         text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=remaining)
@@ -147,22 +147,26 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
     auto_refresh_remaining = AUTO_UPDATE_DURATION_SEC if should_auto_update else None
     text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=auto_refresh_remaining)
 
+    cancel_torrent_update_job(context, chat_id, message_id)
+    message_updated = False
+
     if is_reload:
         try:
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
             await query.answer(text="Reloaded")
+            message_updated = True
         except BadRequest:
             await query.answer(text="Nothing to reload")
     else:
         await query.answer()
         try:
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            message_updated = True
         except BadRequest as exc:
             if not str(exc).startswith("Message is not modified"):
                 raise
 
-    cancel_torrent_update_job(context, chat_id, message_id)
-    if should_auto_update:
+    if should_auto_update and message_updated:
         context.job_queue.run_repeating(
             update_torrent_status,
             interval=AUTO_UPDATE_INTERVAL_SEC,
@@ -218,6 +222,7 @@ async def delete_torrent_action_inline(update: Update, context: ContextTypes.DEF
     query = update.callback_query
     callback = query.data.split("_")
     torrent_id = int(callback[1])
+    cancel_torrent_update_job(context, query.message.chat_id, query.message.message_id)
     if len(callback) == 3 and callback[2] == "data":
         menus.delete_torrent(torrent_id, True)
     else:
