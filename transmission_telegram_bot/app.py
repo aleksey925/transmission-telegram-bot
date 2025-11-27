@@ -1,5 +1,5 @@
+import asyncio
 import logging
-import time
 
 from telegram import Update
 from telegram.error import BadRequest
@@ -18,6 +18,7 @@ logger = logging.getLogger(__name__)
 
 AUTO_UPDATE_INTERVAL = 1  # seconds
 AUTO_UPDATE_DURATION = 60  # seconds
+AUTO_UPDATE_STATUSES = {"downloading", "seeding"}
 
 
 def get_job_name(chat_id: int, message_id: int) -> str:
@@ -41,7 +42,13 @@ async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE):
     data["iteration"] += 1
     remaining = AUTO_UPDATE_DURATION - (data["iteration"] * AUTO_UPDATE_INTERVAL)
 
-    if remaining <= 0:
+    try:
+        status = menus.get_torrent_status(torrent_id)
+    except KeyError:
+        job.schedule_removal()
+        return
+
+    if status not in AUTO_UPDATE_STATUSES or remaining <= 0:
         job.schedule_removal()
         remaining = None
 
@@ -56,8 +63,6 @@ async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE):
         )
     except BadRequest:
         pass
-    except KeyError:
-        job.schedule_removal()
 
 
 @utils.whitelist
@@ -114,41 +119,46 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
         if callback[2] == "start":
             menus.start_torrent(torrent_id)
             await query.answer(text="Started")
-            time.sleep(0.2)
+            await asyncio.sleep(0.2)
         elif callback[2] == "stop":
             menus.stop_torrent(torrent_id)
             await query.answer(text="Stopped")
-            time.sleep(0.2)
+            await asyncio.sleep(0.2)
         elif callback[2] == "verify":
             menus.verify_torrent(torrent_id)
             await query.answer(text="Verifying")
-            time.sleep(0.2)
+            await asyncio.sleep(0.2)
     is_reload = len(callback) == 3 and callback[2] == "reload"
 
     try:
-        text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=AUTO_UPDATE_DURATION)
+        status = menus.get_torrent_status(torrent_id)
     except KeyError:
         await query.answer(text="Torrent no longer exists")
         cancel_torrent_update_job(context, chat_id, message_id)
         text, reply_markup = menus.get_torrents()
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-    else:
-        if is_reload:
-            try:
-                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-                await query.answer(text="Reloaded")
-            except BadRequest:
-                await query.answer(text="Nothing to reload")
-        else:
-            await query.answer()
-            try:
-                await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-            except BadRequest as exc:
-                if not str(exc).startswith("Message is not modified"):
-                    raise exc
+        return
 
-        # start/restart auto-update job
-        cancel_torrent_update_job(context, chat_id, message_id)
+    should_auto_update = status in AUTO_UPDATE_STATUSES
+    auto_refresh_remaining = AUTO_UPDATE_DURATION if should_auto_update else None
+    text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=auto_refresh_remaining)
+
+    if is_reload:
+        try:
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            await query.answer(text="Reloaded")
+        except BadRequest:
+            await query.answer(text="Nothing to reload")
+    else:
+        await query.answer()
+        try:
+            await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+        except BadRequest as exc:
+            if not str(exc).startswith("Message is not modified"):
+                raise exc
+
+    cancel_torrent_update_job(context, chat_id, message_id)
+    if should_auto_update:
         context.job_queue.run_repeating(
             update_torrent_status,
             interval=AUTO_UPDATE_INTERVAL,
@@ -209,7 +219,7 @@ async def delete_torrent_action_inline(update: Update, context: ContextTypes.DEF
     else:
         menus.delete_torrent(torrent_id)
     await query.answer(text="✅Deleted")
-    time.sleep(0.1)
+    await asyncio.sleep(0.1)
     torrent_list, keyboard = menus.get_torrents()
     await query.edit_message_text(text=torrent_list, reply_markup=keyboard, parse_mode="MarkdownV2")
 

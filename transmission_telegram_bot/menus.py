@@ -48,6 +48,10 @@ def change_server(client: int):
     return success
 
 
+def get_torrent_status(torrent_id: int) -> str:
+    return trans_client.get_torrent(torrent_id).status
+
+
 def start_torrent(torrent_id: int):
     trans_client.start_torrent(torrent_id)
 
@@ -403,7 +407,7 @@ def add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
         [
             [
                 telegram.InlineKeyboardButton(
-                    "📂Files",
+                    "📂 Files",
                     callback_data=f"selectfiles_{torrent_id}",
                 )
             ],
