@@ -19,7 +19,7 @@ STATUS_LIST = {
 }
 
 
-def transsmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]:
+def transmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]:
     conn = config.TRANSMISSION_CLIENTS[client].copy()
     del conn["name"]
     try:
@@ -27,7 +27,7 @@ def transsmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]
     except:  # noqa: E722
         if not client:
             raise ValueError
-        fallback_client, disk, name, _ = transsmission_client()
+        fallback_client, disk, name, _ = transmission_client()
         return (fallback_client, disk, name, False)
     return (
         tr,
@@ -37,14 +37,14 @@ def transsmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]
     )
 
 
-trans_client, DISK, CURRENT_SERVER, _ = transsmission_client()
+trans_client, DISK, CURRENT_SERVER, _ = transmission_client()
 
 
 def change_server(client: int) -> bool:
     global trans_client
     global DISK
     global CURRENT_SERVER
-    trans_client, DISK, CURRENT_SERVER, success = transsmission_client(client)
+    trans_client, DISK, CURRENT_SERVER, success = transmission_client(client)
     return success
 
 
