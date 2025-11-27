@@ -16,8 +16,8 @@ from transmission_telegram_bot import config, menus, utils
 
 logger = logging.getLogger(__name__)
 
-AUTO_UPDATE_INTERVAL = 1  # seconds
-AUTO_UPDATE_DURATION = 60  # seconds
+AUTO_UPDATE_INTERVAL_SEC = 1
+AUTO_UPDATE_DURATION_SEC = 60
 AUTO_UPDATE_STATUSES = {"downloading", "seeding"}
 
 
@@ -25,22 +25,25 @@ def get_job_name(chat_id: int, message_id: int) -> str:
     return f"torrent_update_{chat_id}_{message_id}"
 
 
-def cancel_torrent_update_job(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int):
+def cancel_torrent_update_job(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int) -> None:
     job_name = get_job_name(chat_id, message_id)
     jobs = context.job_queue.get_jobs_by_name(job_name)
     for job in jobs:
         job.schedule_removal()
 
 
-async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE):
+async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE) -> None:
     job = context.job
-    data = job.data
-    chat_id = data["chat_id"]
-    message_id = data["message_id"]
-    torrent_id = data["torrent_id"]
+    if job is None or not isinstance(job.data, dict):
+        return
+
+    data: dict[str, int] = job.data
+    chat_id: int = data["chat_id"]
+    message_id: int = data["message_id"]
+    torrent_id: int = data["torrent_id"]
 
     data["iteration"] += 1
-    remaining = AUTO_UPDATE_DURATION - (data["iteration"] * AUTO_UPDATE_INTERVAL)
+    remaining: int | None = AUTO_UPDATE_DURATION_SEC - (data["iteration"] * AUTO_UPDATE_INTERVAL_SEC)
 
     try:
         status = menus.get_torrent_status(torrent_id)
@@ -48,7 +51,7 @@ async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE):
         job.schedule_removal()
         return
 
-    if status not in AUTO_UPDATE_STATUSES or remaining <= 0:
+    if status not in AUTO_UPDATE_STATUSES or remaining is None or remaining <= 0:
         job.schedule_removal()
         remaining = None
 
@@ -140,7 +143,7 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
         return
 
     should_auto_update = status in AUTO_UPDATE_STATUSES
-    auto_refresh_remaining = AUTO_UPDATE_DURATION if should_auto_update else None
+    auto_refresh_remaining = AUTO_UPDATE_DURATION_SEC if should_auto_update else None
     text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=auto_refresh_remaining)
 
     if is_reload:
@@ -155,14 +158,14 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
         except BadRequest as exc:
             if not str(exc).startswith("Message is not modified"):
-                raise exc
+                raise
 
     cancel_torrent_update_job(context, chat_id, message_id)
     if should_auto_update:
         context.job_queue.run_repeating(
             update_torrent_status,
-            interval=AUTO_UPDATE_INTERVAL,
-            first=AUTO_UPDATE_INTERVAL,
+            interval=AUTO_UPDATE_INTERVAL_SEC,
+            first=AUTO_UPDATE_INTERVAL_SEC,
             data={"chat_id": chat_id, "message_id": message_id, "torrent_id": torrent_id, "iteration": 0},
             name=get_job_name(chat_id, message_id),
         )
@@ -368,8 +371,7 @@ async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(text)
 
 
-def run():
-    logger = logging.getLogger(__name__)
+def run() -> None:
     logger.setLevel(logging.INFO)
 
     application = Application.builder().token(config.TOKEN).build()

@@ -40,7 +40,7 @@ def transsmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]
 trans_client, DISK, CURRENT_SERVER, _ = transsmission_client()
 
 
-def change_server(client: int):
+def change_server(client: int) -> bool:
     global trans_client
     global DISK
     global CURRENT_SERVER
@@ -52,23 +52,23 @@ def get_torrent_status(torrent_id: int) -> str:
     return trans_client.get_torrent(torrent_id).status
 
 
-def start_torrent(torrent_id: int):
+def start_torrent(torrent_id: int) -> None:
     trans_client.start_torrent(torrent_id)
 
 
-def stop_torrent(torrent_id: int):
+def stop_torrent(torrent_id: int) -> None:
     trans_client.stop_torrent(torrent_id)
 
 
-def verify_torrent(torrent_id: int):
+def verify_torrent(torrent_id: int) -> None:
     trans_client.verify_torrent(torrent_id)
 
 
-def delete_torrent(torrent_id: int, data: bool = False):
+def delete_torrent(torrent_id: int, data: bool = False) -> None:
     trans_client.remove_torrent(torrent_id, delete_data=data)
 
 
-def torrent_set_files(torrent_id: int, file_id: int, state: bool):
+def torrent_set_files(torrent_id: int, file_id: int, state: bool) -> None:
     if state:
         trans_client.change_torrent(ids=torrent_id, files_wanted=[file_id])
     else:
