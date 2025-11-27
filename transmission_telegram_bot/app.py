@@ -16,6 +16,49 @@ from transmission_telegram_bot import config, menus, utils
 
 logger = logging.getLogger(__name__)
 
+AUTO_UPDATE_INTERVAL = 1  # seconds
+AUTO_UPDATE_DURATION = 60  # seconds
+
+
+def get_job_name(chat_id: int, message_id: int) -> str:
+    return f"torrent_update_{chat_id}_{message_id}"
+
+
+def cancel_torrent_update_job(context: ContextTypes.DEFAULT_TYPE, chat_id: int, message_id: int):
+    job_name = get_job_name(chat_id, message_id)
+    jobs = context.job_queue.get_jobs_by_name(job_name)
+    for job in jobs:
+        job.schedule_removal()
+
+
+async def update_torrent_status(context: ContextTypes.DEFAULT_TYPE):
+    job = context.job
+    data = job.data
+    chat_id = data["chat_id"]
+    message_id = data["message_id"]
+    torrent_id = data["torrent_id"]
+
+    data["iteration"] += 1
+    remaining = AUTO_UPDATE_DURATION - (data["iteration"] * AUTO_UPDATE_INTERVAL)
+
+    if remaining <= 0:
+        job.schedule_removal()
+        remaining = None
+
+    try:
+        text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=remaining)
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=message_id,
+            text=text,
+            reply_markup=reply_markup,
+            parse_mode="MarkdownV2",
+        )
+    except BadRequest:
+        pass
+    except KeyError:
+        job.schedule_removal()
+
 
 @utils.whitelist
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -46,6 +89,7 @@ async def get_torrents_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     callback = query.data.split("_")
     start_point = int(callback[1])
+    cancel_torrent_update_job(context, query.message.chat_id, query.message.message_id)
     torrent_list, keyboard = menus.get_torrents(start_point)
     if len(callback) == 3 and callback[2] == "reload":
         try:
@@ -63,6 +107,9 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
     query = update.callback_query
     callback = query.data.split("_")
     torrent_id = int(callback[1])
+    chat_id = query.message.chat_id
+    message_id = query.message.message_id
+
     if len(callback) == 3 and callback[2] != "reload":
         if callback[2] == "start":
             menus.start_torrent(torrent_id)
@@ -76,14 +123,17 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
             menus.verify_torrent(torrent_id)
             await query.answer(text="Verifying")
             time.sleep(0.2)
+    is_reload = len(callback) == 3 and callback[2] == "reload"
+
     try:
-        text, reply_markup = menus.torrent_menu(torrent_id)
+        text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=AUTO_UPDATE_DURATION)
     except KeyError:
         await query.answer(text="Torrent no longer exists")
+        cancel_torrent_update_job(context, chat_id, message_id)
         text, reply_markup = menus.get_torrents()
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
     else:
-        if len(callback) == 3 and callback[2] == "reload":
+        if is_reload:
             try:
                 await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
                 await query.answer(text="Reloaded")
@@ -97,12 +147,23 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
                 if not str(exc).startswith("Message is not modified"):
                     raise exc
 
+        # start/restart auto-update job
+        cancel_torrent_update_job(context, chat_id, message_id)
+        context.job_queue.run_repeating(
+            update_torrent_status,
+            interval=AUTO_UPDATE_INTERVAL,
+            first=AUTO_UPDATE_INTERVAL,
+            data={"chat_id": chat_id, "message_id": message_id, "torrent_id": torrent_id, "iteration": 0},
+            name=get_job_name(chat_id, message_id),
+        )
+
 
 @utils.whitelist
 async def torrent_files_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     callback = query.data.split("_")
     torrent_id = int(callback[1])
+    cancel_torrent_update_job(context, query.message.chat_id, query.message.message_id)
     try:
         text, reply_markup = menus.get_files(torrent_id)
     except KeyError:
@@ -126,6 +187,7 @@ async def delete_torrent_inline(update: Update, context: ContextTypes.DEFAULT_TY
     query = update.callback_query
     callback = query.data.split("_")
     torrent_id = int(callback[1])
+    cancel_torrent_update_job(context, query.message.chat_id, query.message.message_id)
     try:
         text, reply_markup = menus.delete_menu(torrent_id)
     except KeyError:

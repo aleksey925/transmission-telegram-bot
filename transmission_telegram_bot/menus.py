@@ -108,7 +108,9 @@ def get_memory() -> str:
     return f"Free disk space: {size} {unit}"
 
 
-def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
+def torrent_menu(
+    torrent_id: int, auto_refresh_remaining: int | None = None
+) -> tuple[str, telegram.InlineKeyboardMarkup]:
     torrent = trans_client.get_torrent(torrent_id)
     text = f"*{escape_markdown(torrent.name, 2)}*\n"
 
@@ -183,7 +185,7 @@ def torrent_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
             ],
             [
                 telegram.InlineKeyboardButton(
-                    "🔄 Reload",
+                    f"🔄 {auto_refresh_remaining}s" if auto_refresh_remaining else "🔄 Reload",
                     callback_data=f"torrent_{torrent_id}_reload",
                 ),
             ],
