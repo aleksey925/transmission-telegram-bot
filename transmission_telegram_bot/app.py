@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import re
 from dataclasses import dataclass
 from typing import Literal
 
@@ -13,6 +14,7 @@ from telegram.ext import (
     MessageHandler,
     filters,
 )
+from transmission_rpc.error import TransmissionError
 
 from transmission_telegram_bot import config, menus, utils
 from transmission_telegram_bot.logger import init_logger
@@ -24,6 +26,8 @@ AUTO_UPDATE_DURATION_SEC = 60
 AUTO_UPDATE_STATUSES = {"downloading", "seeding", "checking"}
 ACTIONS_REQUIRING_AUTO_UPDATE = {"start", "verify"}
 
+MAGNET_PATTERN = re.compile(r"magnet:\?xt=urn:btih:[^\s]+")
+TORRENT_URL_PATTERN = re.compile(r"https?://[^\s]+\.torrent\b", re.IGNORECASE)
 
 TorrentAction = Literal["view", "start", "stop", "verify", "reload"]
 
@@ -254,32 +258,45 @@ async def delete_torrent_action_inline(update: Update, context: ContextTypes.DEF
 async def torrent_file_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     file = await context.bot.get_file(update.message.document)
     file_bytes = await file.download_as_bytearray()
-    torrent = menus.add_torrent_with_file(file_bytes)
-    await update.message.reply_text("Torrent added", do_quote=True)
-    text, reply_markup = menus.add_menu(torrent.id)
-    await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+    try:
+        torrent = menus.add_torrent_with_file(file_bytes)
+    except TransmissionError as e:
+        await update.message.reply_text(f"Failed to add torrent: {e}", do_quote=True)
+    else:
+        await update.message.reply_text("Torrent added", do_quote=True)
+        text, reply_markup = menus.add_menu(torrent.id)
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
 
 @utils.whitelist
 async def magnet_url_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
         return
-    magnet_url = update.message.text
-    torrent = menus.add_torrent_with_magnet(magnet_url)
-    await update.message.reply_text("Torrent added", do_quote=True)
-    text, reply_markup = menus.add_menu(torrent.id)
-    await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+    magnet_urls = MAGNET_PATTERN.findall(update.message.text)
+    for magnet_url in magnet_urls:
+        try:
+            torrent = menus.add_torrent_with_magnet(magnet_url)
+        except TransmissionError as e:
+            await update.message.reply_text(f"Failed to add torrent: {e}", do_quote=True)
+            continue
+        text, reply_markup = menus.add_menu(torrent.id)
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
 
 @utils.whitelist
 async def torrent_url_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message is None or update.message.text is None:
         return
-    torrent_url = update.message.text.strip()
-    torrent = menus.add_torrent_with_url(torrent_url)
-    await update.message.reply_text("Torrent added", do_quote=True)
-    text, reply_markup = menus.add_menu(torrent.id)
-    await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+    torrent_urls = TORRENT_URL_PATTERN.findall(update.message.text)
+    for torrent_url in torrent_urls:
+        try:
+            torrent = menus.add_torrent_with_url(torrent_url)
+        except TransmissionError as e:
+            await update.message.reply_text(f"Failed to add torrent: {e}", do_quote=True)
+            continue
+
+        text, reply_markup = menus.add_menu(torrent.id)
+        await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
 
 @utils.whitelist
@@ -413,8 +430,8 @@ def run() -> None:
 
     application.add_error_handler(error_handler)
     application.add_handler(MessageHandler(filters.Document.FileExtension("torrent"), torrent_file_handler))
-    application.add_handler(MessageHandler(filters.Regex(r"\Amagnet:\?xt=urn:btih:.*"), magnet_url_handler))
-    application.add_handler(MessageHandler(filters.Regex(r"(?i)\Ahttps?://.*\.torrent\b"), torrent_url_handler))
+    application.add_handler(MessageHandler(filters.Regex(MAGNET_PATTERN), magnet_url_handler))
+    application.add_handler(MessageHandler(filters.Regex(TORRENT_URL_PATTERN), torrent_url_handler))
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("menu", start))
     application.add_handler(CommandHandler("add", add))
