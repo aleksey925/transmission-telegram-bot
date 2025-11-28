@@ -1,5 +1,7 @@
 import asyncio
 import logging
+from dataclasses import dataclass
+from typing import Literal
 
 from telegram import Update
 from telegram.error import BadRequest
@@ -20,6 +22,26 @@ logger = logging.getLogger(__name__)
 AUTO_UPDATE_INTERVAL_SEC = 1
 AUTO_UPDATE_DURATION_SEC = 60
 AUTO_UPDATE_STATUSES = {"downloading", "seeding", "checking"}
+ACTIONS_REQUIRING_AUTO_UPDATE = {"start", "verify"}
+
+
+TorrentAction = Literal["view", "start", "stop", "verify", "reload"]
+
+
+@dataclass(frozen=True, slots=True)
+class TorrentCallback:
+    """Parsed callback data for torrent menu: torrent_{id}[_{action}]"""
+
+    torrent_id: int
+    action: TorrentAction = "view"
+
+    @classmethod
+    def parse(cls, data: str) -> TorrentCallback:
+        parts = data.split("_")
+        return cls(
+            torrent_id=int(parts[1]),
+            action=parts[2] if len(parts) == 3 else "view",
+        )
 
 
 def get_job_name(chat_id: int, message_id: int) -> str:
@@ -113,31 +135,24 @@ async def get_torrents_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 @utils.whitelist
-async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):  # noqa: C901
+async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    callback = query.data.split("_")
-    torrent_id = int(callback[1])
+    cb = TorrentCallback.parse(query.data)
     chat_id = query.message.chat_id
     message_id = query.message.message_id
 
-    action_performed = False
-    if len(callback) == 3 and callback[2] != "reload":
-        if callback[2] == "start":
-            menus.start_torrent(torrent_id)
-            await query.answer(text="Started")
-            action_performed = True
-        elif callback[2] == "stop":
-            menus.stop_torrent(torrent_id)
-            await query.answer(text="Stopped")
-            action_performed = True
-        elif callback[2] == "verify":
-            menus.verify_torrent(torrent_id)
-            await query.answer(text="Verifying")
-            action_performed = True
-    is_reload = len(callback) == 3 and callback[2] == "reload"
+    if cb.action == "start":
+        menus.start_torrent(cb.torrent_id)
+        await query.answer(text="Started")
+    elif cb.action == "stop":
+        menus.stop_torrent(cb.torrent_id)
+        await query.answer(text="Stopped")
+    elif cb.action == "verify":
+        menus.verify_torrent(cb.torrent_id)
+        await query.answer(text="Verifying")
 
     try:
-        status = menus.get_torrent_status(torrent_id)
+        status = menus.get_torrent_status(cb.torrent_id)
     except KeyError:
         await query.answer(text="Torrent no longer exists")
         cancel_torrent_update_job(context, chat_id, message_id)
@@ -145,13 +160,13 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
         await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
         return
 
-    should_auto_update = status in AUTO_UPDATE_STATUSES or action_performed
+    should_auto_update = status in AUTO_UPDATE_STATUSES or cb.action in ACTIONS_REQUIRING_AUTO_UPDATE
     auto_refresh_remaining = AUTO_UPDATE_DURATION_SEC if should_auto_update else None
-    text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=auto_refresh_remaining)
+    text, reply_markup = menus.torrent_menu(cb.torrent_id, auto_refresh_remaining=auto_refresh_remaining)
 
     cancel_torrent_update_job(context, chat_id, message_id)
 
-    if is_reload:
+    if cb.action == "reload":
         try:
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
             await query.answer(text="Reloaded")
@@ -170,7 +185,7 @@ async def torrent_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE
             update_torrent_status,
             interval=AUTO_UPDATE_INTERVAL_SEC,
             first=AUTO_UPDATE_INTERVAL_SEC,
-            data={"chat_id": chat_id, "message_id": message_id, "torrent_id": torrent_id, "iteration": 0},
+            data={"chat_id": chat_id, "message_id": message_id, "torrent_id": cb.torrent_id, "iteration": 0},
             name=get_job_name(chat_id, message_id),
         )
 
