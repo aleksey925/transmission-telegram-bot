@@ -70,6 +70,10 @@ def _init_logging(
                     "handlers": ["default"],
                     "level": logging.WARNING,
                 },
+                "apscheduler": {
+                    "handlers": ["default"],
+                    "level": log_level if log_level <= logging.DEBUG else logging.WARNING,
+                },
             },
         }
     )
