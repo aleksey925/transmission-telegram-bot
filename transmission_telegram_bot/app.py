@@ -229,7 +229,10 @@ async def delete_torrent_action_inline(update: Update, context: ContextTypes.DEF
     await query.answer(text="✅Deleted")
     await asyncio.sleep(0.1)
     torrent_list, keyboard = menus.get_torrents()
-    await query.edit_message_text(text=torrent_list, reply_markup=keyboard, parse_mode="MarkdownV2")
+    if torrent_list == "Nothing to display":
+        await query.delete_message()
+    else:
+        await query.edit_message_text(text=torrent_list, reply_markup=keyboard, parse_mode="MarkdownV2")
 
 
 @utils.whitelist
