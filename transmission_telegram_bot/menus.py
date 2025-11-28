@@ -485,22 +485,6 @@ def select_files_add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboard
     return text, reply_markup
 
 
-def started_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboardMarkup]:
-    torrent = trans_client.get_torrent(torrent_id)
-    text = f"Torrent *{escape_markdown(torrent.name, 2)}* started successfully\n"
-    reply_markup = telegram.InlineKeyboardMarkup(
-        [
-            [
-                telegram.InlineKeyboardButton(
-                    "Open Torrent",
-                    callback_data=f"torrent_{torrent_id}",
-                )
-            ]
-        ]
-    )
-    return text, reply_markup
-
-
 def settings_menu() -> tuple[str, telegram.InlineKeyboardMarkup]:
     text = "Here is some bot settings:\n"
     reply_markup = telegram.InlineKeyboardMarkup(

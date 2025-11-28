@@ -290,9 +290,21 @@ async def torrent_adding_actions(update: Update, context: ContextTypes.DEFAULT_T
         torrent_id = int(callback[1])
         if callback[2] == "start":
             menus.start_torrent(torrent_id)
-            text, reply_markup = menus.started_menu(torrent_id)
+            text, reply_markup = menus.torrent_menu(torrent_id, auto_refresh_remaining=AUTO_UPDATE_DURATION_SEC)
             await query.answer(text="✅Started")
             await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
+            context.job_queue.run_repeating(
+                update_torrent_status,
+                interval=AUTO_UPDATE_INTERVAL_SEC,
+                first=AUTO_UPDATE_INTERVAL_SEC,
+                data={
+                    "chat_id": query.message.chat_id,
+                    "message_id": query.message.message_id,
+                    "torrent_id": torrent_id,
+                    "iteration": 0,
+                },
+                name=get_job_name(query.message.chat_id, query.message.message_id),
+            )
         elif callback[2] == "cancel":
             menus.delete_torrent(torrent_id, True)
             await query.answer(text="✅Canceled")
