@@ -19,33 +19,13 @@ STATUS_LIST = {
 }
 
 
-def transmission_client(client: int = 0) -> tuple[trans.Client, str, str, bool]:
-    conn = config.TRANSMISSION_CLIENTS[client].copy()
-    del conn["name"]
-    try:
-        tr = trans.Client(**conn)
-    except:  # noqa: E722
-        if not client:
-            raise ValueError
-        fallback_client, disk, name, _ = transmission_client()
-        return (fallback_client, disk, name, False)
-    return (
-        tr,
-        tr.get_session().download_dir,
-        config.TRANSMISSION_CLIENTS[client]["name"],
-        True,
-    )
-
-
-trans_client, DISK, CURRENT_SERVER, _ = transmission_client()
-
-
-def change_server(client: int) -> bool:
-    global trans_client
-    global DISK
-    global CURRENT_SERVER
-    trans_client, DISK, CURRENT_SERVER, success = transmission_client(client)
-    return success
+trans_client = trans.Client(
+    host=config.TRANSMISSION_HOST,
+    port=config.TRANSMISSION_PORT,
+    username=config.TRANSMISSION_USERNAME,
+    password=config.TRANSMISSION_PASSWORD,
+)
+DISK = trans_client.get_session().download_dir
 
 
 def get_torrent_status(torrent_id: int) -> str:
@@ -482,81 +462,4 @@ def select_files_add_menu(torrent_id: int) -> tuple[str, telegram.InlineKeyboard
         ],
     ]
     reply_markup = telegram.InlineKeyboardMarkup(file_keyboard + control_buttons)
-    return text, reply_markup
-
-
-def settings_menu() -> tuple[str, telegram.InlineKeyboardMarkup]:
-    text = "Here is some bot settings:\n"
-    reply_markup = telegram.InlineKeyboardMarkup(
-        [
-            [
-                telegram.InlineKeyboardButton(
-                    "Change transmission server",
-                    callback_data="changeservermenu_0",
-                )
-            ]
-        ]
-    )
-    return text, reply_markup
-
-
-def change_server_menu(
-    start_point: int = 0,
-) -> tuple[str, telegram.InlineKeyboardMarkup]:
-    page_size = 3
-    text = f"Available servers:\nCurrent: {CURRENT_SERVER}"
-    row = 0
-    server_number = start_point
-    keyboard: list[list[telegram.InlineKeyboardButton]] = []
-    for server in config.TRANSMISSION_CLIENTS[start_point:]:
-        if row < page_size:
-            if server["name"] == CURRENT_SERVER:
-                name = f"{server['name']} 🟢"
-            else:
-                name = server["name"]
-            keyboard.append(
-                [
-                    telegram.InlineKeyboardButton(
-                        name,
-                        callback_data=f"server_{server_number}_{start_point}",
-                    )
-                ]
-            )
-            server_number += 1
-            row += 1
-        else:
-            keyboard.append([])
-            if start_point:
-                keyboard[-1].append(
-                    telegram.InlineKeyboardButton(
-                        "⏪ Back",
-                        callback_data=f"changeservermenu_{start_point - page_size}",
-                    )
-                )
-            keyboard[-1].append(
-                telegram.InlineKeyboardButton(
-                    "Next ⏩",
-                    callback_data=f"changeservermenu_{row}",
-                )
-            )
-            break
-    else:
-        if start_point:
-            keyboard.append(
-                [
-                    telegram.InlineKeyboardButton(
-                        "⏪ Back",
-                        callback_data=f"changeservermenu_{start_point - page_size}",
-                    )
-                ]
-            )
-    keyboard.append(
-        [
-            telegram.InlineKeyboardButton(
-                "⏪ Back to Settings",
-                callback_data="settings",
-            )
-        ]
-    )
-    reply_markup = telegram.InlineKeyboardMarkup(keyboard)
     return text, reply_markup

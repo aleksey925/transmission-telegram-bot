@@ -11,7 +11,6 @@ monitor download progress, and add new torrents directly from Telegram.
 - **Add torrents** — via `.torrent` files, magnet links, or direct URLs
 - **Batch adding** — send multiple magnet/URL links in one message
 - **File selection** — choose which files to download from a torrent
-- **Multi-server support** — switch between multiple Transmission instances
 - **User whitelist** — restrict access to authorized Telegram users only
 
 ## Configuration
@@ -26,21 +25,9 @@ The bot is configured via environment variables:
 | `TRANSMISSION_PORT`     | No       | `9091`           | Transmission RPC port                                            |
 | `TRANSMISSION_USERNAME` | No       | —                | Transmission RPC username                                        |
 | `TRANSMISSION_PASSWORD` | No       | —                | Transmission RPC password                                        |
-| `TRANSMISSION_CLIENTS`  | No       | —                | JSON array for multi-server setup (see below)                    |
 | `LOG_LEVEL`             | No       | `INFO`           | Logging level (DEBUG, INFO, WARNING, ERROR)                      |
 | `LOG_FORMAT`            | No       | `console`        | Log output format: `console` (human-readable) or `json`          |
 | `LOG_TIMESTAMP_FORMAT`  | No       | `iso` (ISO 8601) | Timestamp format, e.g. `%Y-%m-%d %H:%M:%S`                       |
-
-### Multi-server configuration
-
-To manage multiple Transmission instances, use `TRANSMISSION_CLIENTS` instead of individual connection variables:
-
-```json
-[
-  {"name": "Home", "host": "192.168.1.10", "port": 9091, "username": "admin", "password": "secret"},
-  {"name": "VPS", "host": "vps.example.com", "port": 9091, "username": "admin", "password": "secret"}
-]
-```
 
 ## Deployment
 

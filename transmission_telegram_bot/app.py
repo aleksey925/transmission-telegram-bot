@@ -371,45 +371,6 @@ async def select_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
 
 
-@utils.whitelist
-async def settings_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text, reply_markup = menus.settings_menu()
-    await update.message.reply_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-
-
-@utils.whitelist
-async def settings_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    text, reply_markup = menus.settings_menu()
-    await query.answer()
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-
-
-@utils.whitelist
-async def change_server_menu_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    callback = query.data.split("_")
-    text, reply_markup = menus.change_server_menu(int(callback[1]))
-    await query.answer()
-    await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-
-
-@utils.whitelist
-async def change_server_inline(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    query = update.callback_query
-    callback = query.data.split("_")
-    success = menus.change_server(int(callback[1]))
-    text, reply_markup = menus.change_server_menu(int(callback[2]))
-    if success:
-        await query.answer("✅Success")
-    else:
-        await query.answer("❌Error❌")
-    try:
-        await query.edit_message_text(text=text, reply_markup=reply_markup, parse_mode="MarkdownV2")
-    except BadRequest:
-        pass
-
-
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.exception("Exception while handling an update", exc_info=context.error)
 
@@ -439,10 +400,6 @@ def run() -> None:
     application.add_handler(CommandHandler("add", add))
     application.add_handler(CommandHandler("memory", memory))
     application.add_handler(CommandHandler("torrents", get_torrents_command))
-    application.add_handler(CommandHandler("settings", settings_menu_command))
-    application.add_handler(CallbackQueryHandler(settings_menu_inline, pattern="settings"))
-    application.add_handler(CallbackQueryHandler(change_server_inline, pattern=r"server_.*"))
-    application.add_handler(CallbackQueryHandler(change_server_menu_inline, pattern=r"changeservermenu_.*"))
     application.add_handler(CallbackQueryHandler(torrent_adding, pattern=r"addmenu_.*"))
     application.add_handler(CallbackQueryHandler(select_file, pattern=r"fileselect_.*"))
     application.add_handler(CallbackQueryHandler(select_for_download, pattern=r"selectfiles_.*"))
